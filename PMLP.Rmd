@@ -1,0 +1,118 @@
+---
+title: "Practical Machine Learning Project"
+author: "Francisco Nazar A."
+date: "May 20, 2015"
+output: html_document
+---
+
+
+Introduction
+------------
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here:  http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+
+Data
+-----
+
+The data is downloaded: 
+
+```{r}
+downloaddata <- function(url, nastrings) {
+    tmp <- tempfile()
+    download.file(url, tmp, method = "curl")
+    data <- read.csv(tmp, na.strings = nastrings)
+    unlink(tmp)
+    return(data)
+}
+
+trainurl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+traindata <- downloaddata(trainurl, c("", "NA", "#DIV/0!"))
+
+testurl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+testdata <- downloaddata(testurl, c("", "NA", "#DIV/0!"))
+```
+
+Partition of the training set
+---------------
+
+The caret package is loaded and the training data is divided into a training set and a validation set: 
+
+```{r}
+library(caret)
+
+trainset <- createDataPartition(traindata$classe, p = 0.7, list = FALSE)
+TrainingSet <- traindata[trainset, ]
+ValidationSet <- traindata[-trainset, ]
+
+```
+
+Cleaning the data
+----------------
+The data is cleaned; features with variance near zero are excluded, columns with missing values (m40%) are also excluded. 
+```{r}
+# exclude features with zero variance
+nzvcol <- nearZeroVar(TrainingSet)
+TrainingSet <- TrainingSet[, -nzvcol]
+
+# exclude columns with m40% or more missing values exclude descriptive columns like name etc
+cntlength <- sapply(TrainingSet, function(x) {
+    sum(!(is.na(x) | x == ""))
+})
+nullcol <- names(cntlength[cntlength < 0.6 * length(TrainingSet$classe)])
+descriptcol <- c("X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", 
+    "cvtd_timestamp", "new_window", "num_window")
+excludecols <- c(descriptcol, nullcol)
+TrainingSet <- TrainingSet[, !names(TrainingSet) %in% excludecols]
+```
+
+
+Machine Learning Models 
+--------------------
+
+The random forest model is generated with the training set. The random forest model is chosen because it yields good results. 
+
+```{r}
+library(randomForest)
+set.seed(424242)
+model_rf <- train(classe ~ .,  method="rf", data=TrainingSet)  
+```
+
+Cross validation
+----------------
+
+The accuracy of the model is tested on the validation set: 
+
+```{r}
+pvalidation<- predict(model_rf, ValidationSet)
+print(confusionMatrix(pvalidation, ValidationSet$classe))
+```
+
+The accuracy is obove 99.0%, which is good. This implies that the out of sample error is less than 1.0%, very little. Hence, the decision to use the random forest model was correct. 
+
+Predictions on Test set 
+--------
+
+Next, the predictions are made for the test set to complete de assignment: 
+
+```{r}
+ptest <- predict(model_rf, testdata)
+ptest
+```
+
+Finally, the output is saved according to instructions,  and then is sent. 
+
+```{r}
+answers <- as.vector(ptest)
+pml_write_files = function(x) {
+    n = length(x)
+    for (i in 1:n) {
+        filename = paste0("problem_id_", i, ".txt")
+        write.table(x[i], file = filename, quote = FALSE, row.names = FALSE, 
+            col.names = FALSE)
+    }
+}
+pml_write_files(answers)
+```
+
+
